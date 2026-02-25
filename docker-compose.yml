@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: vdi_postgres
+    environment:
+      POSTGRES_USER: vdi_user
+      POSTGRES_PASSWORD: vdi_password
+      POSTGRES_DB: vdi_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vdi_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: vdi_backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      DATABASE_URL: postgresql://vdi_user:vdi_password@db:5432/vdi_db
+      SECRET_KEY: change-this-secret-key-in-production-12345
+      DEBUG: "True"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - vdi_network
+
+  frontend:
+    build: ./frontend
+    container_name: vdi_frontend
+    command: npm start
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      REACT_APP_API_URL: http://localhost:8000
+      REACT_APP_WS_URL: ws://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - vdi_network
+
+volumes:
+  postgres_data:
+
+networks:
+  vdi_network:
+    driver: bridge
